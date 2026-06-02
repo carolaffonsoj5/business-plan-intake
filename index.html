@@ -214,7 +214,7 @@
     scoring / QC fields — not present here.)
    ============================================================ */
 
-const state = { lang:'pt', page:0, answers:{}, code:null, user:null };
+const state = { lang:'pt', page:0, answers:{}, code:null, user:null, loginMode:false };
 const genCode = ()=> String(Math.floor(100000+Math.random()*900000));
 
 /* ============================================================
@@ -272,6 +272,33 @@ async function saveDraft(status){
     );
   }catch(e){ console.warn('saveDraft failed', e); }
 }
+
+/* Load an existing intake into state and jump to the questionnaire */
+async function loadAndResume(){
+  try{
+    const { data } = await sb.from('intakes').select('answers,lang,status').eq('user_id',state.user.id).maybeSingle();
+    if(data && data.answers){ state.answers = data.answers; if(data.lang) state.lang=data.lang; }
+    else { state.answers.acct_email = state.user.email || ''; }
+  }catch(e){ console.warn('load failed', e); }
+  const vp=visiblePages(); const idx=vp.findIndex(p=>p.id==='about');
+  state.page = idx>0?idx:0;
+  document.querySelectorAll('#langs button').forEach(x=>x.classList.toggle('on',x.dataset.l===state.lang));
+  document.documentElement.lang=state.lang;
+}
+
+/* Sign in an existing client (so they can come back and edit) */
+async function doLogin(btn){
+  if(!sb){ showErr('Login requires Supabase configured.'); return false; }
+  setBtnLoading(btn,true);
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: state.answers.login_email, password: state.answers.login_pw
+  });
+  setBtnLoading(btn,false);
+  if(error || !data.user){ showErr(L(UI.loginFail)); return false; }
+  state.user = data.user;
+  await loadAndResume();
+  return true;
+}
 const L = o => (o && (typeof o==='object' ? (o[state.lang]||o.en) : o)) || '';
 
 /* ---------- UI strings ---------- */
@@ -293,6 +320,12 @@ const UI = {
   codeWrong:{en:'Incorrect code. Please check and try again.',pt:'Código incorreto. Verifique e tente novamente.',es:'Código incorrecto. Verifique e inténtelo de nuevo.'},
   codeDemo:{en:'Demo only — in production this is emailed. Your code is',pt:'Apenas demonstração — na versão final isto é enviado por e-mail. Seu código é',es:'Solo demostración — en producción se envía por correo. Su código es'},
   codeResent:{en:'Code resent — check your email.',pt:'Código reenviado — verifique seu e-mail.',es:'Código reenviado — revise su correo.'},
+  haveAccount:{en:'Already have an account? Sign in',pt:'Já tem uma conta? Entrar',es:'¿Ya tiene una cuenta? Iniciar sesión'},
+  noAccount:{en:'New here? Create an account',pt:'É novo aqui? Criar uma conta',es:'¿Nuevo aquí? Crear una cuenta'},
+  loginTitle:{en:'Sign in to continue',pt:'Entre para continuar',es:'Inicie sesión para continuar'},
+  loginSub:{en:'Access your account to review or edit your answers.',pt:'Acesse sua conta para revisar ou editar suas respostas.',es:'Acceda a su cuenta para revisar o editar sus respuestas.'},
+  loginBtn:{en:'Sign in',pt:'Entrar',es:'Iniciar sesión'},
+  loginFail:{en:'Incorrect email or password.',pt:'E-mail ou senha incorretos.',es:'Correo o contraseña incorrectos.'},
   yes:{en:'Yes',pt:'Sim',es:'Sí'},
   no:{en:'No',pt:'Não',es:'No'},
   chooseAll:{en:'Select all that apply',pt:'Selecione todas as opções aplicáveis',es:'Seleccione todas las que correspondan'},
@@ -300,9 +333,9 @@ const UI = {
   uploadSub:{en:'PDF, JPG or PNG · multiple files allowed',pt:'PDF, JPG ou PNG · vários arquivos permitidos',es:'PDF, JPG o PNG · se permiten varios archivos'},
   selCode:{en:'Code',pt:'DDI',es:'Código'},
   addMore:{en:'Add another',pt:'Adicionar outro',es:'Agregar otro'},
-  foot:{en:'© 2026 DataControl Solutions LLC · Business Intelligence · Automation · AI Solutions. This intake collects information to prepare your business reports and is not legal advice.',
-        pt:'© 2026 DataControl Solutions LLC · Inteligência de Negócios · Automação · Soluções de IA. Este formulário coleta informações para preparar seus relatórios de negócios e não constitui aconselhamento jurídico.',
-        es:'© 2026 DataControl Solutions LLC · Inteligencia de Negocios · Automatización · Soluciones de IA. Este formulario recopila información para preparar sus informes de negocio y no constituye asesoramiento legal.'}
+  foot:{en:'© 2021–2026 DataControl Solutions LLC · Business Intelligence · Automation · AI Solutions. This questionnaire does not constitute legal advice and serves only as a basis for building a business plan.',
+        pt:'© 2021–2026 DataControl Solutions LLC · Inteligência de Negócios · Automação · Soluções de IA. Este questionário não constitui aconselhamento jurídico e serve apenas como base para a construção de um business plan.',
+        es:'© 2021–2026 DataControl Solutions LLC · Inteligencia de Negocios · Automatización · Soluciones de IA. Este cuestionario no constituye asesoramiento legal y sirve únicamente como base para la construcción de un business plan.'}
 };
 
 /* ---------- Countries (code + trilingual name) ---------- */
@@ -513,16 +546,16 @@ const PAGES = [
         {v:'salary',label:{en:'High salary / commercial success',pt:'Salário alto / sucesso comercial',es:'Salario alto / éxito comercial'}},
         {v:'none',label:{en:'None of these yet',pt:'Nenhum destes ainda',es:'Ninguno de estos aún'}}
       ]},
-    {k:'ach_awards',t:'textarea',showIf:()=>has('awards'),label:{en:'Briefly describe the award(s) or honor(s)',pt:'Descreva brevemente o(s) prêmio(s) ou condecoração(ões)',es:'Describa brevemente el (los) premio(s) o condecoración(es)'}},
-    {k:'ach_pub',t:'textarea',showIf:()=>has('published'),label:{en:'Briefly describe your publications',pt:'Descreva brevemente suas publicações',es:'Describa brevemente sus publicaciones'}},
+    {k:'ach_awards',t:'textarea',showIf:()=>has('awards'),req:()=>has('awards'),label:{en:'Briefly describe the award(s) or honor(s)',pt:'Descreva brevemente o(s) prêmio(s) ou condecoração(ões)',es:'Describa brevemente el (los) premio(s) o condecoración(es)'}},
+    {k:'ach_pub',t:'textarea',showIf:()=>has('published'),req:()=>has('published'),label:{en:'Briefly describe your publications',pt:'Descreva brevemente suas publicações',es:'Describa brevemente sus publicaciones'}},
     {k:'ach_pub_link',t:'textarea',showIf:()=>has('published'),label:{en:'Links to the articles / research',pt:'Links dos artigos / pesquisas',es:'Enlaces de los artículos / investigaciones'}},
-    {k:'ach_media',t:'textarea',showIf:()=>has('media'),label:{en:'Briefly describe the media coverage',pt:'Descreva brevemente a cobertura de mídia',es:'Describa brevemente la cobertura de medios'}},
+    {k:'ach_media',t:'textarea',showIf:()=>has('media'),req:()=>has('media'),label:{en:'Briefly describe the media coverage',pt:'Descreva brevemente a cobertura de mídia',es:'Describa brevemente la cobertura de medios'}},
     {k:'ach_media_link',t:'textarea',showIf:()=>has('media'),label:{en:'Links to the coverage',pt:'Links da cobertura',es:'Enlaces de la cobertura'}},
-    {k:'ach_patent',t:'textarea',showIf:()=>has('patents'),label:{en:'Briefly describe the patent / IP',pt:'Descreva brevemente a patente / PI',es:'Describa brevemente la patente / PI'}},
+    {k:'ach_patent',t:'textarea',showIf:()=>has('patents'),req:()=>has('patents'),label:{en:'Briefly describe the patent / IP',pt:'Descreva brevemente a patente / PI',es:'Describa brevemente la patente / PI'}},
     {k:'ach_patent_num',t:'text',showIf:()=>has('patents'),label:{en:'Patent / registration number',pt:'Número da patente / registro',es:'Número de patente / registro'}},
-    {k:'ach_speaking',t:'textarea',showIf:()=>has('speaking'),label:{en:'Briefly describe (speaking, judging, reviewing)',pt:'Descreva brevemente (palestras, julgamentos, revisões)',es:'Describa brevemente (conferencias, jurados, revisiones)'}},
-    {k:'ach_leadership',t:'textarea',showIf:()=>has('leadership'),label:{en:'Briefly describe your leadership role(s)',pt:'Descreva brevemente seu(s) papel(éis) de liderança',es:'Describa brevemente su(s) rol(es) de liderazgo'}},
-    {k:'ach_membership',t:'textarea',showIf:()=>has('memberships'),label:{en:'Briefly describe the memberships',pt:'Descreva brevemente as associações',es:'Describa brevemente las membresías'}},
+    {k:'ach_speaking',t:'textarea',showIf:()=>has('speaking'),req:()=>has('speaking'),label:{en:'Briefly describe (speaking, judging, reviewing)',pt:'Descreva brevemente (palestras, julgamentos, revisões)',es:'Describa brevemente (conferencias, jurados, revisiones)'}},
+    {k:'ach_leadership',t:'textarea',showIf:()=>has('leadership'),req:()=>has('leadership'),label:{en:'Briefly describe your leadership role(s)',pt:'Descreva brevemente seu(s) papel(éis) de liderança',es:'Describa brevemente su(s) rol(es) de liderazgo'}},
+    {k:'ach_membership',t:'textarea',showIf:()=>has('memberships'),req:()=>has('memberships'),label:{en:'Briefly describe the memberships',pt:'Descreva brevemente as associações',es:'Describa brevemente las membresías'}},
     {k:'ach_salary',t:'select',showIf:()=>has('salary'),req:()=>has('salary'),label:{en:'Approximate monthly income (in your local currency)',pt:'Renda mensal aproximada (na sua moeda local)',es:'Ingreso mensual aproximado (en su moneda local)'},
       options:[
         {v:'lt10',label:{en:'Up to 10,000 / month',pt:'Até 10.000 / mês',es:'Hasta 10.000 / mes'}},
@@ -552,9 +585,9 @@ const PAGES = [
         {v:'us_expand',label:{en:'Expanding into the US',pt:'Expandindo para os EUA',es:'Expandiéndose a EE. UU.'}},
         {v:'us_estab',label:{en:'Already operating in the US',pt:'Já operando nos EUA',es:'Ya operando en EE. UU.'}}
       ]},
-    {k:'biz_name',t:'text',label:{en:'Business name',pt:'Nome da empresa',es:'Nombre de la empresa'}},
-    {k:'biz_formed',t:'yesno',req:true,label:{en:'Is the company legally formed?',pt:'A empresa está legalmente constituída?',es:'¿La empresa está legalmente constituida?'}},
-    {k:'biz_country',t:'text',showIf:a=>a.biz_formed==='yes',label:{en:'Where is it registered? (country / US state)',pt:'Onde está registrada? (país / estado dos EUA)',es:'¿Dónde está registrada? (país / estado de EE. UU.)'}},
+    {k:'biz_name',t:'text',req:a=>a.biz_stage==='us_estab',label:{en:'Business name',pt:'Nome da empresa',es:'Nombre de la empresa'}},
+    {k:'biz_formed',t:'yesno',req:true,showIf:a=>a.biz_stage!=='us_estab',label:{en:'Is the company legally formed?',pt:'A empresa está legalmente constituída?',es:'¿La empresa está legalmente constituida?'}},
+    {k:'biz_country',t:'text',showIf:a=>a.biz_formed==='yes'&&a.biz_stage!=='us_estab',label:{en:'Where is it registered? (country / US state)',pt:'Onde está registrada? (país / estado dos EUA)',es:'¿Dónde está registrada? (país / estado de EE. UU.)'}},
     /* US-operating block (required when already operating in the US) */
     {k:'biz_ein',t:'text',showIf:a=>a.biz_stage==='us_estab',req:a=>a.biz_stage==='us_estab',label:{en:'Company EIN',pt:'EIN da empresa',es:'EIN de la empresa'}},
     {k:'biz_us_address',t:'textarea',showIf:a=>a.biz_stage==='us_estab',req:a=>a.biz_stage==='us_estab',label:{en:'US business address',pt:'Endereço da empresa nos EUA',es:'Dirección de la empresa en EE. UU.'}},
@@ -563,7 +596,7 @@ const PAGES = [
     {k:'biz_current_revenue',t:'currency',showIf:a=>a.biz_stage==='us_estab',req:a=>a.biz_stage==='us_estab',label:{en:'Current annual revenue (USD)',pt:'Faturamento anual atual (USD)',es:'Facturación anual actual (USD)'}},
     {k:'industry',t:'text',req:true,label:{en:'Industry / sector',pt:'Setor / área de atuação',es:'Sector / área de actividad'},help:{en:'What field does your business operate in? Describe it simply — e.g., software for clinics, specialty coffee export.',pt:'Em qual setor seu negócio atua? Descreva de forma simples — ex.: software para clínicas, exportação de café especial.',es:'¿En qué sector opera su negocio? Descríbalo de forma simple — p. ej., software para clínicas, exportación de café especial.'}},
     {k:'website',t:'text',label:{en:'Website (if any)',pt:'Site (se houver)',es:'Sitio web (si existe)'}},
-    {k:'founded',t:'text',label:{en:'Year founded (if any)',pt:'Ano de fundação (se houver)',es:'Año de fundación (si aplica)'}},
+    {k:'founded',t:'text',showIf:a=>a.biz_stage!=='us_estab',label:{en:'Year founded (if any)',pt:'Ano de fundação (se houver)',es:'Año de fundación (si aplica)'}},
     {k:'ownership_pct',t:'number',label:{en:'Your ownership (%)',pt:'Sua participação (%)',es:'Su participación (%)'}}
   ]
 },
@@ -954,10 +987,11 @@ function render(keepScroll){
 
   if(!p.intro) ensureRepeaters(p);
 
+  const loginNow = (p.id==='account' && state.loginMode);
   let html=`<div class="card"><div class="eyebrow">${L(p.eyebrow)}</div>
-    <h1 class="page-title">${L(p.title)}</h1><p class="page-sub">${L(p.sub)}</p>`;
+    <h1 class="page-title">${L(loginNow?UI.loginTitle:p.title)}</h1><p class="page-sub">${L(loginNow?UI.loginSub:p.sub)}</p>`;
 
-  if(p.secureNote){
+  if(p.secureNote && !loginNow){
     html+=`<div class="note secure">🔒 ${L({en:'Your data is private and used only to prepare your reports. Create a password to protect your account and save your progress.',pt:'Seus dados são privados e usados apenas para preparar seus relatórios. Crie uma senha para proteger sua conta e salvar seu progresso.',es:'Sus datos son privados y se usan solo para preparar sus informes. Cree una contraseña para proteger su cuenta y guardar su progreso.'})}</div>`;
   }
 
@@ -980,14 +1014,23 @@ function render(keepScroll){
       <button type="button" class="resend" id="resendBtn">${L(UI.codeResend)}</button>`;
     if(!sb){ if(!state.code) state.code=genCode();
       html+=`<div class="note demo">🔧 ${L(UI.codeDemo)}: <strong>${state.code}</strong></div>`; }
+  } else if(loginNow){
+    html+=`<div class="field"><div class="lbl">${L({en:'Email',pt:'E-mail',es:'Correo electrónico'})}</div>
+      <input type="email" data-k="login_email" value="${state.answers.login_email?esc(state.answers.login_email):''}"></div>
+      <div class="field"><div class="lbl">${L({en:'Password',pt:'Senha',es:'Contraseña'})}</div>
+      <input type="password" data-k="login_pw" value="${state.answers.login_pw?esc(state.answers.login_pw):''}"></div>
+      <button type="button" class="resend" id="toSignup">${L(UI.noAccount)}</button>`;
   } else {
     html+=visibleFields(p).map(fieldHTML).join('');
+    if(p.id==='account'){
+      html+=`<button type="button" class="resend" id="toLogin">${L(UI.haveAccount)}</button>`;
+    }
   }
 
   const isLast=state.page===vp.length-1;
-  const nextTxt = p.custom==='welcome' ? L(UI.start) : (isLast ? L(UI.submit) : L(UI.cont));
+  const nextTxt = p.custom==='welcome' ? L(UI.start) : (loginNow ? L(UI.loginBtn) : (isLast ? L(UI.submit) : L(UI.cont)));
   const nextClass = isLast ? 'btn-gold' : 'btn-primary';
-  const arrow = (!isLast && p.custom!=='welcome') ? '<span class="arr">→</span>' : '';
+  const arrow = (!isLast && p.custom!=='welcome' && !loginNow) ? '<span class="arr">→</span>' : '';
   html+=`<div class="nav"><div class="err" id="err">${L(UI.fix)}</div><div class="btns">
       ${state.page>0?`<button class="btn btn-ghost" id="backBtn">${L(UI.back)}</button>`:''}
       <button class="btn ${nextClass}" id="nextBtn">${nextTxt}${arrow}</button></div></div></div>`;
@@ -1061,11 +1104,19 @@ function attach(p,isLast){
   const nb=document.getElementById('nextBtn');
   nb.addEventListener('click',async ()=>{
     if(!validate(p)) return;
-    if(p.id==='account'){ if(await doSignup(nb)){ state.page++; render(); } return; }
+    if(p.id==='account'){
+      if(state.loginMode){ if(await doLogin(nb)) render(); }
+      else { if(await doSignup(nb)){ state.page++; render(); } }
+      return;
+    }
     if(p.custom==='verify'){ if(await doVerify(nb)){ state.page++; render(); } return; }
     if(sb && state.user) await saveDraft();
     if(isLast){ await finish(); } else { state.page++; render(); }
   });
+  const toLogin=document.getElementById('toLogin');
+  if(toLogin) toLogin.addEventListener('click',()=>{ state.loginMode=true; render(true); });
+  const toSignup=document.getElementById('toSignup');
+  if(toSignup) toSignup.addEventListener('click',()=>{ state.loginMode=false; render(true); });
   const resend=document.getElementById('resendBtn');
   if(resend) resend.addEventListener('click',async ()=>{
     state.answers.verify_code='';
@@ -1084,6 +1135,7 @@ function validate(p){
     return true;
   }
   if(p.custom==='welcome'||!p.fields) return true;
+  if(p.id==='account' && state.loginMode) return true;
   let ok=true, mismatch=false;
   app.querySelectorAll('.invalid').forEach(e=>e.classList.remove('invalid'));
   const err=document.getElementById('err'); if(err) err.classList.remove('show');
@@ -1113,13 +1165,85 @@ function validate(p){
   return ok;
 }
 
+/* Build a readable HTML summary of all answers (for the confirmation email) */
+function buildSummaryHTML(){
+  const skip=['acct_pw','acct_pw2','verify_code'];
+  const fmtVal=(f,v)=>{
+    if(f.t==='yesno') return v==='yes'?L(UI.yes):L(UI.no);
+    if(f.t==='country'){ const c=COUNTRIES.find(x=>x.c===v); return c?cname(c):v; }
+    if(f.t==='select'||f.t==='radio'){ const o=(f.options||[]).find(x=>x.v===v); return o?L(o.label):v; }
+    if(f.t==='checks'){ return (Array.isArray(v)?v:[]).map(val=>{const o=(f.options||[]).find(x=>x.v===val);return o?L(o.label):val;}).join(', '); }
+    if(f.t==='file'){ return (Array.isArray(v)?v:[]).join(', '); }
+    return String(v);
+  };
+  let rows='';
+  PAGES.forEach(p=>{
+    if(!p.fields || p.intro || p.custom) return;
+    const a=state.answers;
+    let block='';
+    p.fields.forEach(f=>{
+      if(skip.includes(f.k)) return;
+      if(f.showIf && !f.showIf(a)) return;
+      if(f.t==='phone'){
+        const val=(a[f.k+'_code']||'')+' '+(a[f.k+'_num']||''); if(val.trim()) block+=row(L(f.label),val);
+        return;
+      }
+      if(f.t==='repeater'){
+        const list=Array.isArray(a[f.k])?a[f.k]:[];
+        const good=list.filter(r=>Object.values(r).some(x=>x!=null&&x!==''));
+        if(!good.length) return;
+        const inner=good.map((r,i)=>{
+          const parts=f.sub.filter(sf=>!sf.showIf||sf.showIf(r)).map(sf=>{
+            const sv=r[sf.k]; if(sv==null||sv==='') return '';
+            return '<div style="font-size:13px;color:#36506e">• '+L(sf.label)+': <strong>'+fmtVal(sf,sv)+'</strong></div>';
+          }).join('');
+          return '<div style="margin:6px 0 0">'+parts+'</div>';
+        }).join('');
+        block+=row(L(f.label),inner,true);
+        return;
+      }
+      const v=a[f.k];
+      if(v==null||v===''||(Array.isArray(v)&&v.length===0)) return;
+      block+=row(L(f.label),fmtVal(f,v));
+    });
+    if(block) rows+='<tr><td style="padding:14px 0 4px;font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#C9A227">'+L(p.title)+'</td></tr>'+block;
+  });
+  function row(label,val,raw){
+    return '<tr><td style="padding:5px 0;border-bottom:1px solid #eef1f5;font-size:13px;color:#16202e">'
+      +'<span style="color:#5d6b7d">'+label+':</span> '+(raw?val:'<strong>'+val+'</strong>')+'</td></tr>';
+  }
+  const intro=L({en:'Here is a copy of the answers you submitted:',pt:'Aqui está uma cópia das respostas que você enviou:',es:'Aquí tiene una copia de las respuestas que envió:'});
+  return '<table width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f5;padding:24px 0;font-family:Arial,Helvetica,sans-serif"><tr><td align="center">'
+    +'<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e4e8ee">'
+    +'<tr><td style="background:#0B1F3A;padding:20px 28px"><span style="color:#C9A227;font-size:17px;font-weight:bold">DataControl Solutions LLC</span><br><span style="color:#9fb0c6;font-size:9px;letter-spacing:1px;text-transform:uppercase">Business Intelligence · Automation · AI Solutions</span></td></tr>'
+    +'<tr><td style="padding:26px 28px"><h1 style="margin:0 0 6px;font-size:19px;color:#16202e">'+L({en:'We received your questionnaire',pt:'Recebemos o seu questionário',es:'Recibimos su cuestionario'})+'</h1>'
+    +'<p style="margin:0 0 18px;font-size:14px;color:#5d6b7d;line-height:1.5">'+L({en:'Within up to 2 hours, one of our agents will contact you.',pt:'Em até 2 horas, um de nossos agentes entrará em contato.',es:'En un plazo de hasta 2 horas, uno de nuestros agentes se pondrá en contacto.'})+'</p>'
+    +'<p style="margin:0 0 10px;font-size:13px;color:#36506e">'+intro+'</p>'
+    +'<table width="100%" cellpadding="0" cellspacing="0">'+rows+'</table></td></tr>'
+    +'<tr><td style="background:#f7f9fb;padding:14px 28px;border-top:1px solid #e4e8ee"><span style="font-size:11px;color:#9aa7b6">© 2026 DataControl Solutions LLC</span></td></tr>'
+    +'</table></td></tr></table>';
+}
+
 async function finish(){
-  await saveDraft('submitted');
+  const summary = buildSummaryHTML();
+  if(sb && state.user){
+    try{
+      await sb.from('intakes').upsert(
+        { user_id:state.user.id, answers:state.answers, lang:state.lang, status:'submitted', summary_html:summary },
+        { onConflict:'user_id' }
+      );
+    }catch(e){ console.warn('submit save failed', e); }
+    try{
+      await sb.functions.invoke('send-confirmation', {
+        body:{ subject:L({en:'Your questionnaire — DataControl Solutions',pt:'Seu questionário — DataControl Solutions',es:'Su cuestionario — DataControl Solutions'}), html:summary }
+      });
+    }catch(e){ console.warn('confirmation email skipped', e); }
+  }
   if(!PAGES.find(x=>x.id==='done')) PAGES.push({id:'done',
-    title:{en:'Thank you — your intake is complete',pt:'Obrigado — seu formulário está completo',es:'Gracias — su formulario está completo'},
-    sub:{en:'Our team will review your answers and begin preparing your business reports. We will reach out if anything else is needed.',
-         pt:'Nossa equipe revisará suas respostas e começará a preparar seus relatórios de negócios. Entraremos em contato se algo mais for necessário.',
-         es:'Nuestro equipo revisará sus respuestas y comenzará a preparar sus informes de negocio. Le contactaremos si se necesita algo más.'}});
+    title:{en:'Thank you — your questionnaire is complete',pt:'Obrigado — seu questionário está completo',es:'Gracias — su cuestionario está completo'},
+    sub:{en:'Within up to 2 hours, one of our agents will contact you. You will also receive a copy of your answers by email.',
+         pt:'Em até 2 horas, um de nossos agentes entrará em contato. Você também receberá uma cópia das suas respostas por e-mail.',
+         es:'En un plazo de hasta 2 horas, uno de nuestros agentes se pondrá en contacto. También recibirá una copia de sus respuestas por correo.'}});
   state.page=visiblePages().length-1; render();
 }
 
