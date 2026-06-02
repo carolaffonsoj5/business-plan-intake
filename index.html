@@ -138,7 +138,7 @@
   .note{background:#f4f8fd;border:1px solid #d8e3f0;border-left:3px solid var(--slate);border-radius:10px;padding:13px 16px;font-size:13px;color:#36506e;line-height:1.55;margin-bottom:26px}
   .note.secure{background:#fbf7e9;border-color:#ecdca0;border-left-color:var(--gold)}
   .note.demo{background:#eef1f5;border-color:#d8dee7;border-left-color:#9aa7b6;color:#5d6b7d;font-size:12px}
-  .code-input{max-width:240px;text-align:center;font-size:26px;font-weight:800;letter-spacing:12px;padding-left:12px}
+  .code-input{max-width:300px;text-align:center;font-size:24px;font-weight:800;letter-spacing:8px;padding-left:8px}
   .resend{appearance:none;border:0;background:transparent;color:var(--slate);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;padding:2px 0 14px;display:inline-block}
   .resend:hover{color:var(--navy)}
   .checklist{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:9px}
@@ -287,7 +287,7 @@ const UI = {
   submit:{en:'Submit intake',pt:'Enviar formulário',es:'Enviar formulario'},
   fix:{en:'Please complete the highlighted required fields.',pt:'Por favor, preencha os campos obrigatórios destacados.',es:'Por favor, complete los campos obligatorios resaltados.'},
   pwmatch:{en:'The passwords do not match.',pt:'As senhas não coincidem.',es:'Las contraseñas no coinciden.'},
-  codeSent:{en:'We sent a 6-digit verification code to {email}.',pt:'Enviamos um código de verificação de 6 dígitos para {email}.',es:'Enviamos un código de verificación de 6 dígitos a {email}.'},
+  codeSent:{en:'We sent a verification code to {email}.',pt:'Enviamos um código de verificação para {email}.',es:'Enviamos un código de verificación a {email}.'},
   codeLabel:{en:'Verification code',pt:'Código de verificação',es:'Código de verificación'},
   codeResend:{en:'Resend code',pt:'Reenviar código',es:'Reenviar código'},
   codeWrong:{en:'Incorrect code. Please check and try again.',pt:'Código incorreto. Verifique e tente novamente.',es:'Código incorrecto. Verifique e inténtelo de nuevo.'},
@@ -976,7 +976,7 @@ function render(keepScroll){
     const email = state.answers.acct_email || L({en:'your email',pt:'seu e-mail',es:'su correo'});
     html+=`<div class="note">📧 ${L(UI.codeSent).replace('{email}','<strong>'+esc(email)+'</strong>')}</div>
       <div class="field"><div class="lbl">${L(UI.codeLabel)} <span class="tag req">${L(UI.req)}</span></div>
-      <input type="text" inputmode="numeric" maxlength="6" class="code-input" data-k="verify_code" value="${state.answers.verify_code?esc(state.answers.verify_code):''}"></div>
+      <input type="text" inputmode="numeric" maxlength="10" class="code-input" data-k="verify_code" value="${state.answers.verify_code?esc(state.answers.verify_code):''}"></div>
       <button type="button" class="resend" id="resendBtn">${L(UI.codeResend)}</button>`;
     if(!sb){ if(!state.code) state.code=genCode();
       html+=`<div class="note demo">🔧 ${L(UI.codeDemo)}: <strong>${state.code}</strong></div>`; }
